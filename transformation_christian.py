@@ -88,7 +88,9 @@ if __name__=='__main__':
     # perform transform only if all corners have been defined
     if (len(click_points) == 4):
         
+        print(click_points)
         pts1 = np.float32(click_points)
+        print(pts1)
         transformed = transform_affine(im_original, pts1)
         
         win_name = "Affine transform"
@@ -96,3 +98,9 @@ if __name__=='__main__':
         cv.imshow(win_name, transformed)
         cv.waitKey(0)
             
+
+# [(170, 208), (789, 182), (251, 508), (677, 504)]  <- clickpoints
+# [[170. 208.]  
+#  [789. 182.]
+#  [251. 508.] 
+#  [677. 504.]]  <- 

@@ -76,6 +76,47 @@ def crop_and_warp(img, crop_rect):
 
 	return cv.warpPerspective(img, m, (int(side), int(side)))
 
+
+# Transform fucntion by Christian
+def transform_affine(im, pts1):
+    """ Apply affine transform to image given a set of reference points.
+    Args:
+        im (numpy array): Source image
+        pts (list): 4 tuples of (x,y) coordinates of corners 
+
+            
+    Returns:
+        transformed (numpy array): Affine transformed image from selected points.
+
+    Reference points must be provided in the following order for perspective rectification:
+    pts = [top-left ,top-rifgt, bottom-left, bottom-right]
+
+                pt 0           pt 1
+                    ------------
+                    |          |
+                    |          |
+                    |          |
+                    |          |
+                    ------------
+                pt  2          pt 3
+    """
+
+    rows = 512
+    cols = 512
+    
+    pts2 = np.float32([[0,0],[rows,0],[0,cols],[rows,cols]])
+    
+    # compute transformation matrix
+    m = cv.getPerspectiveTransform(pts1,pts2)
+    # apply affine transform
+    transformed = cv.warpPerspective(im, m,(rows,cols))
+
+    return transformed
+
+
+
+
+
 # Reading image 
 original_img = cv.imread(image_path)
 img = cv.imread(image_path, cv.IMREAD_GRAYSCALE)
@@ -91,11 +132,23 @@ external_only = cv.drawContours(processed.copy(), ext_contours, -1, (0, 255, 0),
 corners = find_corners_of_largest_polygon(processed)
 points = display_points(processed, corners)
 
+
 logger.info('Saving corners image (phase 1)')
 cv.imwrite('result_corners.png', points)
 
 cropped = crop_and_warp(img, corners)
+# Saving partial result
+# logger.info('Saving semi-cropped image (phase 1.5)')
+# cv.imwrite('result.png', cropped)
 
-# Saving result
-logger.info('Saving semi-cropped image (phase 1.5)')
-cv.imwrite('result.png', cropped)
+
+# Transformed soduko board
+
+# print(corners)
+corners_transform = np.float32(corners)
+corners_transform[2][0], corners_transform[2][1], corners_transform[3][0], corners_transform[3][1] = corners_transform[3][0], corners_transform[3][1], corners_transform[2][0], corners_transform[2][1]
+transformed = transform_affine(img, corners_transform)
+# img = cv.circle(transformed, tuple((388, 337)), 10, (0, 255, 0))
+# Saving result phase 2
+logger.info('Saving cropped and warped image (phase 2)')
+cv.imwrite('result.png', transformed)
