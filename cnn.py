@@ -44,7 +44,8 @@ model.load_state_dict(checkpoint['model_state_dict'])
 
 def predict(img):
     img = np.array(img, dtype='f')
-    img = cv.copyMakeBorder(img, 10, 10, 10, 10, cv.BORDER_CONSTANT, value=255)
+    padding = 22
+    img = cv.copyMakeBorder(img, padding, padding, padding, padding, cv.BORDER_CONSTANT, value=255)
     img = cv.resize(img, dsize=(50,50), interpolation = cv.INTER_CUBIC)
     new_img = torch.tensor([[img]])
     x = model(new_img)

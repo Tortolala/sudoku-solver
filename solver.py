@@ -320,7 +320,7 @@ squares = infer_grid(cropped)
 # display_rects(cropped, squares)
 digits = get_digits(cropped, squares, 28)
 # show_digits(digits)
-print(len(digits))
+# print(len(digits))
 # print(digits[1])
 # print(cv.bitwise_not(digits[1]))
 
@@ -354,4 +354,8 @@ for digit in digits:
 	img = cv.bitwise_not(digit)
 	recognized_digits.append(predict(img))
 
-print(recognized_digits)
+logger.info('Building sudoku matrix...')
+recognized_digits_new = ['-' if x == 0 else x for x in recognized_digits]
+sudoku_matrix = np.reshape(recognized_digits_new, (9, 9)).T
+
+print(sudoku_matrix)
