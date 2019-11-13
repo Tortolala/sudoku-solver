@@ -5,8 +5,7 @@ import operator
 import numpy as np
 import os
 import pickle
-# import tensorflow.compat.v1 as tf
-# tf.disable_v2_behavior()
+from cnn import predict
 
 # Basic config
 logging.basicConfig(level = logging.INFO)
@@ -142,7 +141,6 @@ def show_image(img):
 	cv.imshow('image', img)  # Display the image
 	cv.waitKey(0)  # Wait for any key to be pressed (with the image window active)
 	cv.destroyAllWindows()  # Close all windows
-
 
 def cut_from_rect(img, rect):
 	"""Cuts a rectangle from an image using the top left and bottom right points."""
@@ -293,8 +291,9 @@ corners = find_corners_of_largest_polygon(processed)
 points = display_points(processed, corners)
 
 
-logger.info('Saving corners image (phase 1)')
-cv.imwrite('result_corners.png', points)
+logger.info('Getting image\'s corners...')
+# logger.info('Saving corners image (phase 1)')
+# cv.imwrite('result_corners.png', points)
 
 cropped = crop_and_warp(img, corners)
 # Saving partial result
@@ -306,80 +305,53 @@ cropped = crop_and_warp(img, corners)
 
 # print(corners)
 corners_transform = np.float32(corners)
-corners_transform[2][0], corners_transform[2][1], corners_transform[3][0], corners_transform[3][1] = corners_transform[3][0], corners_transform[3][1], corners_transform[2][0], corners_transform[2][1]
+corners_transform[2][0], corners_transform[2][1], corners_transform[3][0], corners_transform[3][1] = corners_transform[3][0],corners_transform[3][1], corners_transform[2][0], corners_transform[2][1]
 transformed = transform_affine(img, corners_transform)
 # img = cv.circle(transformed, tuple((388, 337)), 10, (0, 255, 0))
 # Saving result phase 2
-logger.info('Saving cropped and warped image (phase 2)')
-cv.imwrite('result.png', transformed)
+logger.info('Cropping image...')
+# logger.info('Saving cropped and warped image (phase 2)')
+# cv.imwrite('result.png', transformed)
 
 
 # GETTING DIGITS
+logger.info('Extracting digits from grid...')
 squares = infer_grid(cropped)
 # display_rects(cropped, squares)
 digits = get_digits(cropped, squares, 28)
 # show_digits(digits)
 print(len(digits))
+# print(digits[1])
+# print(cv.bitwise_not(digits[1]))
 
-# # NN FOR DIGIT RECOGNITION
-# x = tf.placeholder(tf.float32, shape=[None, 784])  # Placeholder for input
-# y_ = tf.placeholder(tf.float32, shape=[None, 10])  # Placeholder for true labels (used in training)
-# hidden_neurons = 16  # Number of neurons in the hidden layer, constant
 
-# def weights(shape):
-# 	"""Weight initialisation with a random, slightly positive value to help prevent dead neurons."""
-# 	return tf.Variable(tf.random_normal(shape, stddev=0.1))
-# def biases(shape):
-# 	"""Bias initialisation with a positive constant, helps to prevent dead neurons."""
-# 	return tf.Variable(tf.constant(0.1, shape=shape))
+# cv.namedWindow('normal', cv.WINDOW_NORMAL)
+# cv.imshow('normal', digits[1])
+# cv.namedWindow('inverted', cv.WINDOW_NORMAL)
+# cv.imshow('inverted',cv.bitwise_not(digits[1]))
+# cv.waitKey(0)
+# cv.destroyAllWindows()
 
-# # Hidden layer
-# w_1 = weights([784, hidden_neurons])
-# b_1 = biases([hidden_neurons])
-# h_1 = tf.nn.sigmoid(tf.matmul(x, w_1) + b_1)
-# w_2 = weights([hidden_neurons, 10])
-# b_2 = biases([10])
-# y = tf.matmul(h_1, w_2) + b_2
+# Saving digits for test in notebook
+# cv.imwrite('1.png', cv.bitwise_not(digits[1]))
+# cv.imwrite('2.png', cv.bitwise_not(digits[4]))
+# cv.imwrite('3.png', cv.bitwise_not(digits[5]))
+# cv.imwrite('4.png', cv.bitwise_not(digits[7]))
+# cv.imwrite('5.png', cv.bitwise_not(digits[12]))
+# cv.imwrite('6.png', cv.bitwise_not(digits[15]))
+# cv.imwrite('7.png', cv.bitwise_not(digits[19]))
+# cv.imwrite('8.png', cv.bitwise_not(digits[41]))
+# cv.imwrite('9.png', cv.bitwise_not(digits[39]))
+# cv.imwrite('0.png', cv.bitwise_not(digits[73]))
+# cv.imwrite('null.png', cv.bitwise_not(digits[0]))
 
-# cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
+logger.info('Recognizing digits...')
+# gray = cv.bitwise_not(digits[12])
+# print("Predicted: ", predict(gray))
 
-# # Gradient descent and backpropagation learning
-# train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cost)
+recognized_digits = []
+for digit in digits: 
+	img = cv.bitwise_not(digit)
+	recognized_digits.append(predict(img))
 
-# # Accuracy comparison/measurement function
-# correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-# accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-
-# model_path = os.getcwd() + "/model"
-
-# def load_data(file_name):
-# 	"""Loads Python object from disk."""
-# 	with open(file_name, 'rb') as f:
-# 		data = pickle.load(f)
-# 	return data
-
-# # Train the network
-# ds = load_data(os.path.join('data', 'digit-basic'))  # Dataset
-# saver = tf.train.Saver()  # Initialise a model saver
-
-# with tf.Session() as sess:  # Start the TensorFlow session
-#     tf.global_variables_initializer().run()
-
-#     try:  # Attempt to load a saved model if it exists
-#         saver.restore(sess, model_path)
-#     except:
-#         print('Could not load model from %s.' % model_path)
-
-#     for i in range(500):
-#         batch = ds.train.next_batch(100)  # Grab 100 images from the training set
-#         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1]})  # Batch is a tuple with images and labels
-#         if i % 100 == 0:  # Every 100 steps, show the training accuracy
-#             train_accuracy = accuracy.eval(feed_dict={x: batch[0], y_: batch[1]})
-#             print('Step: %s' % i)
-#             print('Training Accuracy: %s' % train_accuracy)
-
-#     # Show the test accuracy at the end
-#     print('\nTest accuracy: %s' % accuracy.eval(feed_dict={x: ds.test.images, y_: ds.test.labels}))
-#     saver.save(sess, model_path)  # Save the model
-
-	
+print(recognized_digits)
