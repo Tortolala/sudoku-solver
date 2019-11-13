@@ -3,6 +3,10 @@ import logging
 import cv2 as cv
 import operator
 import numpy as np
+import os
+import pickle
+# import tensorflow.compat.v1 as tf
+# tf.disable_v2_behavior()
 
 # Basic config
 logging.basicConfig(level = logging.INFO)
@@ -76,7 +80,6 @@ def crop_and_warp(img, crop_rect):
 
 	return cv.warpPerspective(img, m, (int(side), int(side)))
 
-
 # Transform fucntion by Christian
 def transform_affine(im, pts1):
     """ Apply affine transform to image given a set of reference points.
@@ -114,8 +117,165 @@ def transform_affine(im, pts1):
     return transformed
 
 
+def infer_grid(img):
+	"""Infers 81 cell grid from a square image."""
+	squares = []
+	side = img.shape[:1]
+	side = side[0] / 9
+	for i in range(9):
+		for j in range(9):
+			p1 = (i * side, j * side)  # Top left corner of a bounding box
+			p2 = ((i + 1) * side, (j + 1) * side)  # Bottom right corner of bounding box
+			squares.append((p1, p2))
+	return squares
+
+def display_rects(in_img, rects, colour=255):
+	"""Displays rectangles on the image."""
+	img = in_img.copy()
+	for rect in rects:
+		img = cv.rectangle(img, tuple(int(x) for x in rect[0]), tuple(int(x) for x in rect[1]), colour)
+	show_image(img)
+	return img
+
+def show_image(img):
+	"""Shows an image until any key is pressed"""
+	cv.imshow('image', img)  # Display the image
+	cv.waitKey(0)  # Wait for any key to be pressed (with the image window active)
+	cv.destroyAllWindows()  # Close all windows
 
 
+def cut_from_rect(img, rect):
+	"""Cuts a rectangle from an image using the top left and bottom right points."""
+	return img[int(rect[0][1]):int(rect[1][1]), int(rect[0][0]):int(rect[1][0])]
+
+def scale_and_centre(img, size, margin=0, background=0):
+	"""Scales and centres an image onto a new background square."""
+	h, w = img.shape[:2]
+
+	def centre_pad(length):
+		"""Handles centering for a given length that may be odd or even."""
+		if length % 2 == 0:
+			side1 = int((size - length) / 2)
+			side2 = side1
+		else:
+			side1 = int((size - length) / 2)
+			side2 = side1 + 1
+		return side1, side2
+
+	def scale(r, x):
+		return int(r * x)
+
+	if h > w:
+		t_pad = int(margin / 2)
+		b_pad = t_pad
+		ratio = (size - margin) / h
+		w, h = scale(ratio, w), scale(ratio, h)
+		l_pad, r_pad = centre_pad(w)
+	else:
+		l_pad = int(margin / 2)
+		r_pad = l_pad
+		ratio = (size - margin) / w
+		w, h = scale(ratio, w), scale(ratio, h)
+		t_pad, b_pad = centre_pad(h)
+
+	img = cv.resize(img, (w, h))
+	img = cv.copyMakeBorder(img, t_pad, b_pad, l_pad, r_pad, cv.BORDER_CONSTANT, None, background)
+	return cv.resize(img, (size, size))
+
+def find_largest_feature(inp_img, scan_tl=None, scan_br=None):
+	"""
+	Uses the fact the `floodFill` function returns a bounding box of the area it filled to find the biggest
+	connected pixel structure in the image. Fills this structure in white, reducing the rest to black.
+	"""
+	img = inp_img.copy()  # Copy the image, leaving the original untouched
+	height, width = img.shape[:2]
+
+	max_area = 0
+	seed_point = (None, None)
+
+	if scan_tl is None:
+		scan_tl = [0, 0]
+
+	if scan_br is None:
+		scan_br = [width, height]
+
+	# Loop through the image
+	for x in range(scan_tl[0], scan_br[0]):
+		for y in range(scan_tl[1], scan_br[1]):
+			# Only operate on light or white squares
+			if img.item(y, x) == 255 and x < width and y < height:  # Note that .item() appears to take input as y, x
+				area = cv.floodFill(img, None, (x, y), 64)
+				if area[0] > max_area:  # Gets the maximum bound area which should be the grid
+					max_area = area[0]
+					seed_point = (x, y)
+
+	# Colour everything grey (compensates for features outside of our middle scanning range
+	for x in range(width):
+		for y in range(height):
+			if img.item(y, x) == 255 and x < width and y < height:
+				cv.floodFill(img, None, (x, y), 64)
+
+	mask = np.zeros((height + 2, width + 2), np.uint8)  # Mask that is 2 pixels bigger than the image
+
+	# Highlight the main feature
+	if all([p is not None for p in seed_point]):
+		cv.floodFill(img, mask, seed_point, 255)
+
+	top, bottom, left, right = height, 0, width, 0
+
+	for x in range(width):
+		for y in range(height):
+			if img.item(y, x) == 64:  # Hide anything that isn't the main feature
+				cv.floodFill(img, mask, (x, y), 0)
+
+			# Find the bounding parameters
+			if img.item(y, x) == 255:
+				top = y if y < top else top
+				bottom = y if y > bottom else bottom
+				left = x if x < left else left
+				right = x if x > right else right
+
+	bbox = [[left, top], [right, bottom]]
+	return img, np.array(bbox, dtype='float32'), seed_point
+
+def extract_digit(img, rect, size):
+	"""Extracts a digit (if one exists) from a Sudoku square."""
+
+	digit = cut_from_rect(img, rect)  # Get the digit box from the whole square
+
+	# Use fill feature finding to get the largest feature in middle of the box
+	# Margin used to define an area in the middle we would expect to find a pixel belonging to the digit
+	h, w = digit.shape[:2]
+	margin = int(np.mean([h, w]) / 2.5)
+	_, bbox, seed = find_largest_feature(digit, [margin, margin], [w - margin, h - margin])
+	digit = cut_from_rect(digit, bbox)
+
+	# Scale and pad the digit so that it fits a square of the digit size we're using for machine learning
+	w = bbox[1][0] - bbox[0][0]
+	h = bbox[1][1] - bbox[0][1]
+
+	# Ignore any small bounding boxes
+	if w > 0 and h > 0 and (w * h) > 100 and len(digit) > 0:
+		return scale_and_centre(digit, size, 4)
+	else:
+		return np.zeros((size, size), np.uint8)
+
+def get_digits(img, squares, size):
+	"""Extracts digits from their cells and builds an array"""
+	digits = []
+	img = pre_process_image(img.copy())
+	for square in squares:
+		digits.append(extract_digit(img, square, size))
+	return digits
+
+def show_digits(digits, colour=255):
+	"""Shows list of 81 extracted digits in a grid format"""
+	rows = []
+	with_border = [cv.copyMakeBorder(img.copy(), 1, 1, 1, 1, cv.BORDER_CONSTANT, None, colour) for img in digits]
+	for i in range(9):
+		row = np.concatenate(with_border[i * 9:((i + 1) * 9)], axis=1)
+		rows.append(row)
+	show_image(np.concatenate(rows))
 
 # Reading image 
 original_img = cv.imread(image_path)
@@ -152,3 +312,74 @@ transformed = transform_affine(img, corners_transform)
 # Saving result phase 2
 logger.info('Saving cropped and warped image (phase 2)')
 cv.imwrite('result.png', transformed)
+
+
+# GETTING DIGITS
+squares = infer_grid(cropped)
+# display_rects(cropped, squares)
+digits = get_digits(cropped, squares, 28)
+# show_digits(digits)
+print(len(digits))
+
+# # NN FOR DIGIT RECOGNITION
+# x = tf.placeholder(tf.float32, shape=[None, 784])  # Placeholder for input
+# y_ = tf.placeholder(tf.float32, shape=[None, 10])  # Placeholder for true labels (used in training)
+# hidden_neurons = 16  # Number of neurons in the hidden layer, constant
+
+# def weights(shape):
+# 	"""Weight initialisation with a random, slightly positive value to help prevent dead neurons."""
+# 	return tf.Variable(tf.random_normal(shape, stddev=0.1))
+# def biases(shape):
+# 	"""Bias initialisation with a positive constant, helps to prevent dead neurons."""
+# 	return tf.Variable(tf.constant(0.1, shape=shape))
+
+# # Hidden layer
+# w_1 = weights([784, hidden_neurons])
+# b_1 = biases([hidden_neurons])
+# h_1 = tf.nn.sigmoid(tf.matmul(x, w_1) + b_1)
+# w_2 = weights([hidden_neurons, 10])
+# b_2 = biases([10])
+# y = tf.matmul(h_1, w_2) + b_2
+
+# cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
+
+# # Gradient descent and backpropagation learning
+# train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cost)
+
+# # Accuracy comparison/measurement function
+# correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+# accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+# model_path = os.getcwd() + "/model"
+
+# def load_data(file_name):
+# 	"""Loads Python object from disk."""
+# 	with open(file_name, 'rb') as f:
+# 		data = pickle.load(f)
+# 	return data
+
+# # Train the network
+# ds = load_data(os.path.join('data', 'digit-basic'))  # Dataset
+# saver = tf.train.Saver()  # Initialise a model saver
+
+# with tf.Session() as sess:  # Start the TensorFlow session
+#     tf.global_variables_initializer().run()
+
+#     try:  # Attempt to load a saved model if it exists
+#         saver.restore(sess, model_path)
+#     except:
+#         print('Could not load model from %s.' % model_path)
+
+#     for i in range(500):
+#         batch = ds.train.next_batch(100)  # Grab 100 images from the training set
+#         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1]})  # Batch is a tuple with images and labels
+#         if i % 100 == 0:  # Every 100 steps, show the training accuracy
+#             train_accuracy = accuracy.eval(feed_dict={x: batch[0], y_: batch[1]})
+#             print('Step: %s' % i)
+#             print('Training Accuracy: %s' % train_accuracy)
+
+#     # Show the test accuracy at the end
+#     print('\nTest accuracy: %s' % accuracy.eval(feed_dict={x: ds.test.images, y_: ds.test.labels}))
+#     saver.save(sess, model_path)  # Save the model
+
+	
