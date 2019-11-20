@@ -1,4 +1,3 @@
-
 import json
 
 
@@ -16,27 +15,18 @@ def sudoku_reference():
 	coords = cross(all_rows, all_cols)
 	# print(len(coords))  # 81
 
-	# Get the units for each row
 	row_units = [cross(row, all_cols) for row in all_rows]
-	# print(row_units[0])  # ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9']
 
-	# Do it in reverse to get the units for each column
 	col_units = [cross(all_rows, col) for col in all_cols]
-	# print(col_units[0])  # ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1', 'I1']
 
 	box_units = [cross(row_square, col_square) for row_square in ['ABC', 'DEF', 'GHI'] for col_square in ['123', '456', '789']]
-	# print(box_units[0])   # ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3']
 
 	all_units = row_units + col_units + box_units  # Add units together
 	groups = {}
 
-	# For each cell, get the each unit that the cell is part of (3 per cell)
 	groups['units'] = {pos: [unit for unit in all_units if pos in unit] for pos in coords}
-	# print(groups['units']['A1'])  # 3 Units of length 9 for each cell
 
-	# For each cell get the list of peers to that position
 	groups['peers'] = {pos: set(sum(groups['units'][pos], [])) - {pos} for pos in coords}
-	# print(groups['peers']['A1'])  # Peer cells for the position, length 20 for each cell
 
 	return coords, groups, all_units
 
@@ -56,7 +46,7 @@ def parse_puzzle(puzzle):
 	# Turn the list into a dictionary using the coordinates as the keys
 	parsed_puzzle =  dict(zip(coords, puzzle))
 
-
+	
 	return parsed_puzzle
 
 
@@ -67,25 +57,24 @@ def validate_sudoku(puzzle):
 		return False
 
 	coords, groups, all_units = sudoku_reference()
-	full = [str(x) for x in range(1, 10)]  # Full set, 1-9 as strings
+	full = [str(x) for x in range(1, 10)]
 
-	# Checks if all units contain a full set
 	return all([sorted([puzzle[cell] for cell in unit]) == full for unit in all_units])
 
 
 def solve_puzzle(puzzle):
 	"""Solves a Sudoku puzzle from a string input."""
-	digits = '123456789'  # Using a string here instead of a list
+	digits = '123456789'  
 
 	coords, groups, all_units = sudoku_reference()
 	input_grid = parse_puzzle(puzzle)
 	# print(input_grid)
-	input_grid = {k: v for k, v in input_grid.items() if v != '.'}  # Filter so we only have confirmed cells
-	output_grid = {cell: digits for cell in coords}  # Create a board where all digits are possible in each cell
+	input_grid = {k: v for k, v in input_grid.items() if v != '.'}  
+	output_grid = {cell: digits for cell in coords} 
 
 	def confirm_value(grid, pos, val):
 		"""Confirms a value by eliminating all other remaining possibilities."""
-		remaining_values = grid[pos].replace(val, '')  # Possibilities we can eliminate due to the confirmation
+		remaining_values = grid[pos].replace(val, '')  
 		for val in remaining_values:
 			grid = eliminate(grid, pos, val)
 		return grid

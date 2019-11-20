@@ -243,6 +243,8 @@ def show_digits(digits, colour=255):
 original_img = cv.imread(image_path)
 img = cv.imread(image_path, cv.IMREAD_GRAYSCALE)
 
+
+cv.imwrite('results/original.png', img)
 # Main processing
 processed = pre_process_image(img)
 
@@ -331,7 +333,6 @@ print(answers)
 transposed_answers = list(np.reshape(answers, (9,9)).T.flat)
 
 
-
 #TODO: Overwrite straight image with answers to original image
 #TODO: Refactor everything
 
@@ -352,12 +353,34 @@ def print_over_grid(img):
 		if transposed_answers[i] is not None:
 			semi_final_img = cv.putText(semi_final_img, transposed_answers[i], answers_boxes[i], cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv.LINE_AA)
 
-	cv.namedWindow('semi final', cv.WINDOW_NORMAL)
-	cv.imshow('semi final', semi_final_img)
-	cv.waitKey(0)
-	cv.destroyAllWindows()
+	# cv.namedWindow('semi final', cv.WINDOW_NORMAL)
+	# cv.imshow('semi final', semi_final_img)
+	# cv.waitKey(0)
+	# cv.destroyAllWindows()
+	return semi_final_img
 
-print_over_grid(cropped)
+semi_final_img = print_over_grid(cropped)
+
+new_corners = [list(corner) for corner in corners]
+print(new_corners)
+new_corners[2], new_corners[3] = new_corners[3], new_corners[2]
 
 
+def invert(im, pts1):
+	rows = processed.shape[1]
+	cols = processed.shape[0]
+	pts2 = np.float32([[0,0],[rows,0],[0,cols],[rows,cols]])
+	m = cv.getPerspectiveTransform(pts1, pts2)
+	transformed = cv.warpPerspective(im, m, (rows, cols), flags=cv.WARP_INVERSE_MAP)
+	return np.array(transformed)
 
+final_image_pre = invert(semi_final_img, np.float32(new_corners))
+print(final_image_pre.shape)
+
+# cv.namedWindow('semi final', cv.WINDOW_NORMAL)
+# cv.imshow('semi final', final_image_pre)
+# cv.waitKey(0)
+# cv.destroyAllWindows()
+
+cv.imwrite('results/result_straight.png', semi_final_img)
+cv.imwrite('results/result_perspective.png', final_image_pre)
