@@ -6,6 +6,7 @@ import numpy as np
 import os
 import pickle
 from cnn import predict
+from sudoku import solve_puzzle
 
 # Basic config
 logging.basicConfig(level = logging.INFO)
@@ -332,18 +333,6 @@ digits = get_digits(cropped, squares, 28)
 # cv.waitKey(0)
 # cv.destroyAllWindows()
 
-# Saving digits for test in notebook
-# cv.imwrite('1.png', cv.bitwise_not(digits[1]))
-# cv.imwrite('2.png', cv.bitwise_not(digits[4]))
-# cv.imwrite('3.png', cv.bitwise_not(digits[5]))
-# cv.imwrite('4.png', cv.bitwise_not(digits[7]))
-# cv.imwrite('5.png', cv.bitwise_not(digits[12]))
-# cv.imwrite('6.png', cv.bitwise_not(digits[15]))
-# cv.imwrite('7.png', cv.bitwise_not(digits[19]))
-# cv.imwrite('8.png', cv.bitwise_not(digits[41]))
-# cv.imwrite('9.png', cv.bitwise_not(digits[39]))
-# cv.imwrite('0.png', cv.bitwise_not(digits[73]))
-# cv.imwrite('null.png', cv.bitwise_not(digits[0]))
 
 logger.info('Recognizing digits...')
 # gray = cv.bitwise_not(digits[12])
@@ -355,7 +344,59 @@ for digit in digits:
 	recognized_digits.append(predict(img))
 
 logger.info('Building sudoku matrix...')
-recognized_digits_new = ['-' if x == 0 else x for x in recognized_digits]
+recognized_digits_new = ['.' if x == 0 else x for x in recognized_digits]
 sudoku_matrix = np.reshape(recognized_digits_new, (9, 9)).T
-
+# print(recognized_digits_new)
+puzz = list(sudoku_matrix.flat) 
+# print(len(list(sudoku_matrix.flat)))
 print(sudoku_matrix)
+solved_puzzle = solve_puzzle(puzz)
+print(np.reshape(list(solved_puzzle.values()), (9,9)))
+
+print(puzz)
+solved_puzz = list(solved_puzzle.values()) 
+
+answers = []
+
+for i in range(0, 81):
+	if puzz[i] == solved_puzz[i]:
+		answers.append(None)
+	else:
+		answers.append(solved_puzz[i])
+
+print(answers)
+transposed_answers = list(np.reshape(answers, (9,9)).T.flat)
+# print(squares)
+# print(len(squares))
+
+#TODO: Print the numbers in "answers" to straight image
+#TODO: Overwrite straight image with answers to original image
+#TODO: try with new checkpoint of Ricardo
+#TODO: Refactor everything
+
+def print_over_grid(img):
+	"""Prints answers over 81 cell grid."""
+
+	answers_boxes = []
+
+	for i in range(0, len(squares)):
+		left_bottom = (int(squares[i][0][0]) + 12, int(squares[i][1][1]) - 15)
+		answers_boxes.append(left_bottom)
+
+	print(answers_boxes)
+
+	semi_final_img = cropped.copy()
+
+	for i in range(0, 81):
+		if transposed_answers[i] is not None:
+			semi_final_img = cv.putText(semi_final_img, transposed_answers[i], answers_boxes[i], cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv.LINE_AA)
+
+	cv.namedWindow('semi final', cv.WINDOW_NORMAL)
+	cv.imshow('semi final', semi_final_img)
+	cv.waitKey(0)
+	cv.destroyAllWindows()
+
+print_over_grid(cropped)
+
+
+
