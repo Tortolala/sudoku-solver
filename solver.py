@@ -5,7 +5,7 @@ import operator
 import numpy as np
 import os
 import pickle
-from cnn import predict
+from cnn_new import predict
 from sudoku import solve_puzzle
 
 # Basic config
@@ -79,43 +79,6 @@ def crop_and_warp(img, crop_rect):
 	m = cv.getPerspectiveTransform(src, dst)
 
 	return cv.warpPerspective(img, m, (int(side), int(side)))
-
-# Transform fucntion by Christian
-def transform_affine(im, pts1):
-    """ Apply affine transform to image given a set of reference points.
-    Args:
-        im (numpy array): Source image
-        pts (list): 4 tuples of (x,y) coordinates of corners 
-
-            
-    Returns:
-        transformed (numpy array): Affine transformed image from selected points.
-
-    Reference points must be provided in the following order for perspective rectification:
-    pts = [top-left ,top-rifgt, bottom-left, bottom-right]
-
-                pt 0           pt 1
-                    ------------
-                    |          |
-                    |          |
-                    |          |
-                    |          |
-                    ------------
-                pt  2          pt 3
-    """
-
-    rows = 512
-    cols = 512
-    
-    pts2 = np.float32([[0,0],[rows,0],[0,cols],[rows,cols]])
-    
-    # compute transformation matrix
-    m = cv.getPerspectiveTransform(pts1,pts2)
-    # apply affine transform
-    transformed = cv.warpPerspective(im, m,(rows,cols))
-
-    return transformed
-
 
 def infer_grid(img):
 	"""Infers 81 cell grid from a square image."""
@@ -307,7 +270,7 @@ cropped = crop_and_warp(img, corners)
 # print(corners)
 corners_transform = np.float32(corners)
 corners_transform[2][0], corners_transform[2][1], corners_transform[3][0], corners_transform[3][1] = corners_transform[3][0],corners_transform[3][1], corners_transform[2][0], corners_transform[2][1]
-transformed = transform_affine(img, corners_transform)
+# transformed = transform_affine(img, corners_transform)
 # img = cv.circle(transformed, tuple((388, 337)), 10, (0, 255, 0))
 # Saving result phase 2
 logger.info('Cropping image...')
@@ -366,12 +329,10 @@ for i in range(0, 81):
 
 print(answers)
 transposed_answers = list(np.reshape(answers, (9,9)).T.flat)
-# print(squares)
-# print(len(squares))
 
-#TODO: Print the numbers in "answers" to straight image
+
+
 #TODO: Overwrite straight image with answers to original image
-#TODO: try with new checkpoint of Ricardo
 #TODO: Refactor everything
 
 def print_over_grid(img):
